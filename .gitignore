@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store
+.env
+.env.*
+config.json
+*.key
+*.pem
+*.wav
+*.mp3
+*.pcm
+output/

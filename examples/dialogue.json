@@ -1,0 +1,10 @@
+{
+  "speakers": [
+    {"speaker": "Host", "voice": "Kore"},
+    {"speaker": "Guest", "voice": "Puck"}
+  ],
+  "turns": [
+    {"speaker": "Host", "text": "What makes a good story?", "style": "curious and relaxed"},
+    {"speaker": "Guest", "text": "Someone worth listening to. <short pause> And a little surprise.", "style": "warm and thoughtful"}
+  ]
+}
