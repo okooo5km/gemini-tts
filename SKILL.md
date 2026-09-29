@@ -1,11 +1,22 @@
 ---
 name: gemini-tts
-description: 使用 Google Gemini 3.8 Flash TTS 将文本生成 WAV 语音，支持音色、语气、语速描述和双人对话。用于朗读、配音、旁白和播客语音生成，不用于语音识别或实时语音聊天。
+description: 在 macOS、Linux、Windows 上使用 Google Gemini 3.8 Flash TTS 将文本生成 WAV 语音，支持音色、语气、语速描述和双人对话。用于朗读、配音、旁白和播客语音生成，不用于语音识别或实时语音聊天。
 ---
 
 # Gemini TTS
 
 使用本技能目录内的 `scripts/tts.py`，仅依赖 Python 3 标准库。固定模型 `gemini-3.8-flash-tts`，通过 Google Interactions REST API 生成 WAV。
+
+## 跨平台执行
+
+先确认执行主机、Shell 和可用 Python（3.10+），不要从用户电脑系统推断远端执行环境。脚本路径以当前已加载的 `SKILL.md` 所在目录为准，不依赖工作目录或固定安装位置。
+
+- macOS/Linux：通常用 `python3`；显式引用脚本路径，包含空格时加引号。
+- Windows PowerShell：先检查 `py -3 --version`，可用时执行 `py -3 -X utf8 "$skillDir/scripts/tts.py" ...`；否则验证 `python --version` 后用 `python -X utf8`。`$skillDir` 指实际技能目录，不假定 `python3`、Bash 或 Unix 工具存在。
+- PowerShell 不使用 Bash 的 `\` 续行、`export`、`ln -s`。长命令用参数数组或单行；CMD 使用双引号，不能照搬单引号。WSL 按 Linux 处理，Windows Python 和 WSL Python 的路径不可混用。
+- 正文优先用 UTF-8 文件（支持有 BOM 和无 BOM）；Windows PowerShell 5.1 的默认重定向可能写出 UTF-16，不要用默认 `>` 制作输入文件。管道必须提供 UTF-8 字节，Python 无法修复 Shell 已损坏的中文。
+
+安装、配置和可复制的 PowerShell 示例见 [跨平台指南](references/platforms.md)。下文 Bash 示例需根据实际解释器和 Shell 调整，不改系统全局编码或执行策略。
 
 ## 密钥
 
@@ -17,7 +28,7 @@ description: 使用 Google Gemini 3.8 Flash TTS 将文本生成 WAV 语音，支
 python3 ~/.agents/skills/gemini-tts/scripts/tts.py configure
 ```
 
-密钥保存在 `~/.config/gemini-tts/config.json`，权限为 `600`；用 `GEMINI_TTS_CONFIG` 指定其他配置路径。该文件是本地明文凭据，位于技能目录之外。已有环境变量可直接使用，无需写配置。不要把真实密钥写进脚本、技能、聊天、命令参数或版本库，不要读取或展示密钥内容。
+密钥保存在 `~/.config/gemini-tts/config.json`，POSIX 权限为 `600`；Windows 使用当前用户目录的 ACL，不把 `chmod` 当成 Windows 隐私保障；用 `GEMINI_TTS_CONFIG` 指定其他配置路径。该文件是本地明文凭据，位于技能目录之外。已有环境变量可直接使用，无需写配置。不要把真实密钥写进脚本、技能、聊天、命令参数或版本库，不要读取或展示密钥内容。
 
 ## 表演控制
 

@@ -1,5 +1,7 @@
 # 语音控制速查
 
+以下多行命令按 Bash 展示；Windows PowerShell 的解释器、参数数组及 UTF-8 文件示例见 [跨平台指南](platforms.md)。请以实际技能安装路径定位脚本。
+
 查看：`python3 ~/.agents/skills/gemini-tts/scripts/tts.py controls`，离线可用。
 
 | 想控制什么 | 参数 | 示例值 |

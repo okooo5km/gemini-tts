@@ -12,6 +12,7 @@ import tempfile
 import urllib.error
 import urllib.request
 import wave
+import warnings
 
 MODEL = 'gemini-3.8-flash-tts'
 ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
@@ -27,7 +28,7 @@ def read_config():
         return {}
     if os.name == 'posix' and path.stat().st_mode & 0o077:
         raise ValueError(f'Config must be private: chmod 600 {path}')
-    value = json.loads(path.read_text(encoding='utf-8'))
+    value = json.loads(path.read_text(encoding='utf-8-sig'))
     if not isinstance(value, dict):
         raise ValueError('Config must be a JSON object')
     return value
@@ -36,7 +37,12 @@ def read_config():
 def configure():
     if not sys.stdin.isatty():
         raise ValueError('Run configure in an interactive terminal; alternatively set GEMINI_API_KEY')
-    key = getpass.getpass('Gemini API key (hidden): ').strip()
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', getpass.GetPassWarning)
+        try:
+            key = getpass.getpass('Gemini API key (hidden): ').strip()
+        except getpass.GetPassWarning:
+            raise ValueError('Hidden input unavailable; use a native terminal or an environment variable') from None
     if not key:
         raise ValueError('Empty key; configuration unchanged')
     path = config_path()
@@ -80,7 +86,7 @@ def combined_style(args):
 def payload(args):
     style_default = combined_style(args)
     if args.dialogue:
-        dialog = json.loads(Path(args.dialogue).read_text(encoding='utf-8'))
+        dialog = json.loads(Path(args.dialogue).expanduser().read_text(encoding='utf-8-sig'))
         speakers = dialog.get('speakers', [])
         if not isinstance(speakers, list) or len(speakers) != 2:
             raise ValueError('Dialogue requires exactly two speakers')
@@ -109,7 +115,7 @@ def payload(args):
                             'annotations': [{'type': 'speech_metadata', 'speaker': turn['speaker'], 'style': style}]})
         speech = {'mode': 'conversational', 'speakers': normalized}
     else:
-        text = args.text if args.text is not None else (sys.stdin.read() if args.file == '-' else Path(args.file).read_text(encoding='utf-8'))
+        text = args.text if args.text is not None else (sys.stdin.read().removeprefix('\ufeff') if args.file == '-' else Path(args.file).expanduser().read_text(encoding='utf-8-sig'))
         content = [{'type': 'text', 'text': nonempty(text, 'text'),
                     'annotations': [{'type': 'speech_metadata', 'style': style_default}]}]
         speech = [{'voice': nonempty(args.voice, 'voice')}]
@@ -200,7 +206,15 @@ def main():
     print(json.dumps({'path': str(destination), 'model': MODEL, 'bytes': len(audio), **info}, ensure_ascii=False))
 
 
+def configure_stdio():
+    # Redirected Windows streams may otherwise use a legacy code page.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='strict')
+
+
 if __name__ == '__main__':
+    configure_stdio()
     try:
         main()
     except (ValueError, OSError, KeyError, TypeError, AttributeError, wave.Error, EOFError) as error:

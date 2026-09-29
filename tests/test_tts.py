@@ -1,5 +1,4 @@
 """Offline regression tests. Author: okooo5km(十里)."""
-import argparse
 import base64
 import contextlib
 import importlib.util
@@ -8,11 +7,15 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
+import warnings
 import unittest
 from unittest.mock import patch
 import urllib.error
 import wave
 
+SYSTEM_ENV = os.environ.copy()
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('tts', ROOT / 'scripts/tts.py')
 tts = importlib.util.module_from_spec(spec)
@@ -118,6 +121,44 @@ class TTSTest(unittest.TestCase):
         self.assertNotIn('private transcript', str(caught.exception))
         self.assertEqual(send.call_count, 1)
         self.assertFalse((self.root / 'error.wav').exists())
+
+    def test_bom_transcript_and_dialogue(self):
+        text = self.root / '中文 story.txt'
+        text.write_text('你好，世界。', encoding='utf-8-sig')
+        result = json.loads(self.run_cli('generate', '--file', str(text), '--out', 'unused.wav', '--dry-run'))
+        self.assertEqual(result['input'][0]['content'][0]['text'], '你好，世界。')
+        dialog = self.root / '对话.json'
+        dialog.write_text((ROOT / 'examples/dialogue.json').read_text(encoding='utf-8'), encoding='utf-8-sig')
+        result = json.loads(self.run_cli('generate', '--dialogue', str(dialog), '--out', 'unused.wav', '--dry-run'))
+        self.assertEqual(len(result['input'][0]['content']), 2)
+
+    def test_hidden_input_cannot_fall_back_to_echo(self):
+        def unsafe_prompt(*args):
+            warnings.warn('Cannot hide input', tts.getpass.GetPassWarning)
+            raise AssertionError('Must stop before reading echoed input')
+        with patch.object(tts.sys.stdin, 'isatty', return_value=True), patch.object(tts.getpass, 'getpass', side_effect=unsafe_prompt):
+            with self.assertRaisesRegex(ValueError, 'Hidden input unavailable'):
+                self.run_cli('configure')
+        self.assertFalse(tts.config_path().exists())
+
+    def test_configure_replaces_existing_file(self):
+        with patch.object(tts.sys.stdin, 'isatty', return_value=True), patch.object(tts.getpass, 'getpass', side_effect=['first-fixture', 'second-fixture']):
+            self.run_cli('configure')
+            self.run_cli('configure')
+        self.assertEqual(tts.read_config()['api_key'], 'second-fixture')
+        self.assertEqual(list(self.root.glob('.config-*')), [])
+
+    def test_real_cli_utf8_redirected_streams_and_foreign_cwd(self):
+        env = SYSTEM_ENV.copy()
+        env.update({'PYTHONIOENCODING': 'cp1252', 'PYTHONUTF8': '0'})
+        for key in ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_TTS_CONFIG']:
+            env.pop(key, None)
+        args = [sys.executable, str(ROOT / 'scripts/tts.py'), 'generate', '--file', '-', '--out', str(self.root / '中文 output.wav'), '--dry-run']
+        run = subprocess.run(args, input='你好，世界。'.encode('utf-8'), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self.root, env=env, check=True)
+        part = json.loads(run.stdout.decode('utf-8'))['input'][0]['content'][0]
+        self.assertEqual(part['text'], '你好，世界。')
+        run = subprocess.run([sys.executable, str(ROOT / 'scripts/tts.py'), 'controls'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self.root, env=env, check=True)
+        self.assertIn('语音控制', run.stdout.decode('utf-8'))
 
     def test_controls_available(self):
         self.assertIn('--prosody', self.run_cli('controls'))

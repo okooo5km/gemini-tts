@@ -24,7 +24,24 @@ ln -s ~/.agents/skills/gemini-tts ~/.claude/skills/gemini-tts
 
 If a destination already exists, inspect it first; do not overwrite an existing installation. Other agents can load the same folder using their own skill discovery mechanism. Start a new agent session if needed to discover the skill. Agent-facing instructions and control examples are in Chinese; the CLI can accept transcripts and style instructions in other languages.
 
-For standalone CLI use, clone anywhere and run `python3 scripts/tts.py` from the repository. On Windows, use `python` if appropriate; the shared symlink commands above are for macOS/Linux. Automated tests cover macOS and Linux.
+For standalone CLI use, clone anywhere and run `python3 scripts/tts.py` from the repository. On Windows, use `python` if appropriate; the shared symlink commands above are for macOS/Linux. Automated tests cover macOS, Linux, and Windows.
+
+### Windows PowerShell
+
+Use Python 3.10+ (`py -3 --version`, or verify `python --version`). Clone into a user-owned folder, then use directory junctions for local shared installations:
+
+```powershell
+$skillDir = Join-Path $HOME '.agents/skills/gemini-tts'
+New-Item -ItemType Directory -Force (Split-Path $skillDir) | Out-Null
+git clone https://github.com/okooo5km/gemini-tts.git "$skillDir"
+New-Item -ItemType Directory -Force "$HOME/.codex/skills", "$HOME/.claude/skills" | Out-Null
+New-Item -ItemType Junction -Path "$HOME/.codex/skills/gemini-tts" -Target "$skillDir"
+New-Item -ItemType Junction -Path "$HOME/.claude/skills/gemini-tts" -Target "$skillDir"
+py -3 -X utf8 "$skillDir/scripts/tts.py" configure
+py -3 -X utf8 "$skillDir/scripts/tts.py" generate --text '你好。' --out './hello.wav'
+```
+
+Do not overwrite existing directories. If junctions are unavailable, copy the skill into the agent's skill directory and keep copies updated. Use `python -X utf8` when the `py` launcher is unavailable. PowerShell does not use Bash line continuations or `export`. Full examples for UTF-8 files, paths with spaces, environment variables, and Python integration are in the [platform guide](references/platforms.md).
 
 ## Configure credentials
 
@@ -50,7 +67,7 @@ python3 scripts/tts.py generate \
   --out narration.wav
 ```
 
-Use `--file transcript.txt` for a UTF-8 transcript or `--file -` for stdin. The output directory must exist. Existing files are never overwritten. Successful generation prints JSON with the absolute path, duration, sample rate, channels, and byte count.
+Use `--file transcript.txt` for a UTF-8 transcript (with or without BOM) or `--file -` for UTF-8 stdin. JSON input accepts UTF-8 BOM too. On Windows PowerShell 5.1, use `Set-Content -Encoding UTF8` instead of default redirection to create files; prefer file input over legacy shell pipelines. CLI output is UTF-8, including when redirected. The output directory must exist. Existing files are never overwritten. Successful generation prints JSON with the absolute path, duration, sample rate, channels, and byte count.
 
 ### Expression controls
 
@@ -106,6 +123,7 @@ SKILL.md                     Agent instructions
 agents/openai.yaml           Codex UI metadata
 scripts/tts.py               Python CLI
 references/speech-controls.md Control guidance
+references/platforms.md       Platform-specific execution guidance
 examples/dialogue.json       Two-speaker input example
 tests/test_tts.py             Offline behavior tests
 .github/workflows/tests.yml  CI
