@@ -1,11 +1,11 @@
 ---
 name: gemini-tts
-description: 在 macOS、Linux、Windows 上使用 Google Gemini 3.8 Flash TTS 将文本生成 WAV 语音，支持音色、语气、语速描述和双人对话。用于朗读、配音、旁白和播客语音生成，不用于语音识别或实时语音聊天。
+description: 在 macOS、Linux、Windows 上使用 Google Gemini 3.8 Flash TTS 将文本生成 WAV 语音，支持预置音色、已有自定义音色 ID、语气、语速描述和双人对话。用于朗读、配音、旁白和播客语音生成；不用于语音识别、实时语音聊天或音色创建管理。
 ---
 
 # Gemini TTS
 
-使用本技能目录内的 `scripts/tts.py`，仅依赖 Python 3 标准库。固定模型 `gemini-3.8-flash-tts`，通过 Google Interactions REST API 生成 WAV。
+使用本技能目录内的 `scripts/tts.py` 生成语音，仅依赖 Python 3 标准库。固定模型 `gemini-3.8-flash-tts`，通过 Google Interactions REST API 生成 WAV。
 
 ## 跨平台执行
 
@@ -66,10 +66,24 @@ python3 ~/.agents/skills/gemini-tts/scripts/tts.py generate \
 }
 ```
 
-此模式要求两个不同的角色名，每段必须匹配已配置角色，使用预置音色。此技能不创建或克隆声音。
+此模式要求两个不同的角色名，每段必须匹配已配置角色，使用预置音色。克隆音色不能直接用于双人对话；需要两个自定义音色对谈时，分别生成每一段再拼接。
 
 调用成功后检查返回的时长、采样率和文件路径。脚本会验证 WAV 并直接保存，不能再包一层 WAV 文件头。向用户提供绝对路径音频嵌入 `![语音](/absolute/path/narration.wav)`。仅完成 dry-run 或离线测试时，不要声称已成功生成或试听。
 
+## 使用已有自定义音色
+
+本技能只使用已有音色，不录音、不创建或管理音色。使用用户提供的 `voice_...` ID，或仍有效的 `voicekey_...`。没有 ID 时，让用户从 [Google AI Studio](https://aistudio.google.com/generate-speech) 获取，不启动本地录音页面或服务。
+
+```bash
+python3 /absolute/path/to/skill/scripts/tts.py generate \
+  --text '这是我自己的声音。' --voice voice_YOUR_VOICE_ID \
+  --out /absolute/path/narration.wav
+```
+
+自定义音色的显示名称不是可直接调用的 ID。使用有权访问该音色所属项目的 API key；找不到音色时，先检查 ID、项目权限和有效性，不自动换成预置音色。已有本地昵称仍可解析，仅为兼容旧调用，不提供添加、改名、删除或列出昵称的管理命令，不修改用户已有配置。
+
+`voicekey_...` 是敏感凭据，不应贴进公开聊天、日志或版本库。`--dry-run` 会显示传入的音色值，不要用真实 voice key 做共享示例。自定义音色用于单人生成；双人内容分别生成每一段再拼接。
+
 ## 官方参考
 
-接口与提示方式核对日期：2026-09-28。需要更多音色或发声标签时查阅 [Google TTS 文档](https://ai.google.dev/gemini-api/docs/speech-generation)。持续语气用 `speech_metadata.style`；短暂停顿和非语言发声可用正文内标签，例如 `<short pause>`、`<sigh>`，仅在用户需求合适时添加。
+接口与提示方式核对日期：2026-10-04。需要更多音色或发声标签时查阅 [Google TTS 文档](https://ai.google.dev/gemini-api/docs/speech-generation)，已有自定义音色的调用方式见 [Voice replication](https://ai.google.dev/gemini-api/docs/voice-replication)。持续语气用 `speech_metadata.style`；短暂停顿和非语言发声可用正文内标签，例如 `<short pause>`、`<sigh>`，仅在用户需求合适时添加。

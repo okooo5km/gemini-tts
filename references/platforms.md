@@ -2,11 +2,40 @@
 
 脚本要求 Python 3.10+，只依赖标准库，不需要 Bash、ffmpeg 或额外 pip 包。先确认执行端的系统、Shell 和 Python，再组装命令。运行时从实际技能文件位置定位脚本；不要把个人绝对路径写进技能。
 
+## 安装技能
+
+推荐用开放的 [Agent Skills CLI](https://github.com/vercel-labs/skills) 安装，它会识别仓库根目录的 `SKILL.md`，写入 `~/.agents/skills/gemini-tts`，并让已支持的 Agent 自动发现：
+
+```bash
+npx skills add okooo5km/gemini-tts -g
+```
+
+跳过交互、只装给指定 Agent：
+
+```bash
+npx skills add okooo5km/gemini-tts -g -a codex claude-code -y
+```
+
+只有安装命令需要 Node.js（22.20+）；生成语音仍只需 Python。更新与卸载：
+
+```bash
+npx skills update gemini-tts -g
+npx skills remove gemini-tts -g
+```
+
+手动克隆只用于固定版本或修改技能本身，此时更新方式是 `git pull`，不能用 `npx skills update`。
+
 ## Windows PowerShell（5.1 / 7）
 
 检查解释器：`py -3 --version`。若不可用，检查 `python --version` 并用 `python -X utf8` 替换下面的 `py -3 -X utf8`。不要把 Microsoft Store 的安装提示视为成功运行 Python。
 
-首次安装到当前用户目录：
+首选安装方式：
+
+```powershell
+npx skills add okooo5km/gemini-tts -g -a codex
+```
+
+手动克隆用于固定版本或修改技能本身，需要目录联接把同一份技能挂到各 Agent：
 
 ```powershell
 $skillDir = Join-Path $HOME '.agents/skills/gemini-tts'
@@ -18,6 +47,8 @@ New-Item -ItemType Junction -Path "$HOME/.claude/skills/gemini-tts" -Target "$sk
 ```
 
 仅在目标不存在时创建；已有安装先检查，不强制替换。对本地目录使用 Junction，避免普通 SymbolicLink 所需的开发者模式或管理员权限。若文件系统不支持链接，可把技能复制到 agent 技能目录，后续需同步更新。客户端能否识别链接仍取决于其发现机制。`$HOME` 在 PowerShell 是保留变量，不要重新赋值。
+
+两种方式安装后，技能都位于 `%USERPROFILE%\.agents\skills\gemini-tts`。
 
 交互配置，不把密钥放进命令历史：
 

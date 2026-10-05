@@ -1,4 +1,4 @@
 interface:
   display_name: "Gemini TTS"
-  short_description: "Generate expressive speech with Gemini 3.8 Flash TTS"
+  short_description: "Generate speech with prebuilt or existing custom voices"
   default_prompt: "Use $gemini-tts to turn my text into a spoken WAV file."

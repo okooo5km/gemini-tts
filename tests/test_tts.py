@@ -85,6 +85,88 @@ class TTSTest(unittest.TestCase):
         self.assertEqual(result['duration_seconds'], 0.1)
         self.assertEqual((self.root / 'test.wav').read_bytes(), audio)
 
+    def test_existing_custom_voices_pass_through_without_config_or_network_in_dry_run(self):
+        for voice in ('voice_fixture', 'voicekey_fixture'):
+            with self.subTest(voice=voice), \
+                    patch.object(tts, 'read_config', side_effect=AssertionError), \
+                    patch.object(tts.urllib.request, 'urlopen', side_effect=AssertionError):
+                body = json.loads(self.run_cli(
+                    'generate', '--text', 'Hello', '--voice', voice,
+                    '--out', 'unused.wav', '--dry-run'))
+            self.assertEqual(body['generation_config']['speech_config'], [{'voice': voice}])
+
+    def test_existing_custom_voice_generation_calls_only_the_synthesis_endpoint(self):
+        audio = wav_bytes()
+        for voice in ('voice_fixture', 'voicekey_fixture'):
+            destination = self.root / f'{voice}.wav'
+
+            def send(request, timeout):
+                self.assertEqual(request.full_url, tts.ENDPOINT)
+                self.assertEqual(request.get_method(), 'POST')
+                speech = json.loads(request.data)['generation_config']['speech_config']
+                self.assertEqual(speech, [{'voice': voice}])
+                return io.BytesIO(json.dumps(response(audio)).encode())
+
+            with self.subTest(voice=voice), \
+                    patch.dict(os.environ, {'GEMINI_API_KEY': 'env-fixture'}), \
+                    patch.object(tts, 'read_config', side_effect=AssertionError), \
+                    patch.object(tts.urllib.request, 'urlopen', side_effect=send) as request:
+                result = self.run_cli('generate', '--text', 'Hello', '--voice', voice,
+                                      '--out', str(destination))
+            self.assertEqual(request.call_count, 1)
+            self.assertEqual(destination.read_bytes(), audio)
+            self.assertEqual(json.loads(result)['sample_rate'], 24000)
+
+    def test_existing_alias_remains_usable_without_modifying_configuration(self):
+        config = tts.config_path()
+        original = json.dumps({'api_key': 'fixture-secret',
+                               'voices': {'旁白': 'voice_fixture'},
+                               'last_voice': 'voice_old', 'extra': 'keep-me'}).encode()
+        config.write_bytes(original)
+        config.chmod(0o600)
+
+        def send(request, timeout):
+            self.assertEqual(json.loads(request.data)['generation_config']['speech_config'],
+                             [{'voice': 'voice_fixture'}])
+            return io.BytesIO(json.dumps(response(wav_bytes())).encode())
+
+        with patch.object(tts.urllib.request, 'urlopen', side_effect=send):
+            self.run_cli('generate', '--text', '你好', '--voice', '旁白',
+                         '--out', str(self.root / 'alias.wav'))
+        self.assertEqual(config.read_bytes(), original)
+
+    def test_default_and_prebuilt_voice_names_remain_supported(self):
+        default = json.loads(self.run_cli('generate', '--text', 'Hello',
+                                          '--out', 'unused.wav', '--dry-run'))
+        self.assertEqual(default['generation_config']['speech_config'], [{'voice': 'Kore'}])
+        self.assertEqual(tts.resolve_voice('Puck'), 'Puck')
+
+    def test_custom_voice_access_failure_never_falls_back_or_retries(self):
+        error = urllib.error.HTTPError(tts.ENDPOINT, 403, 'Forbidden', {}, io.BytesIO(b'private'))
+        destination = self.root / 'denied.wav'
+        with patch.dict(os.environ, {'GEMINI_API_KEY': 'env-fixture'}), \
+                patch.object(tts.urllib.request, 'urlopen', side_effect=error) as request, \
+                self.assertRaisesRegex(ValueError, 'HTTP 403'):
+            self.run_cli('generate', '--text', 'Hello', '--voice', 'voice_fixture',
+                         '--out', str(destination))
+        self.assertEqual(request.call_count, 1)
+        self.assertFalse(destination.exists())
+
+    def test_dialogue_rejects_custom_voices_including_existing_aliases(self):
+        config = tts.config_path()
+        config.write_text(json.dumps({'voices': {'旁白': 'voice_fixture'}}))
+        config.chmod(0o600)
+        dialog = self.root / 'custom-dialogue.json'
+        for voice in ('voice_fixture', 'voicekey_fixture', '旁白'):
+            data = json.loads((ROOT / 'examples/dialogue.json').read_text())
+            data['speakers'][0]['voice'] = voice
+            dialog.write_text(json.dumps(data))
+            with self.subTest(voice=voice), \
+                    patch.object(tts.urllib.request, 'urlopen', side_effect=AssertionError), \
+                    self.assertRaisesRegex(ValueError, 'prebuilt voices'):
+                self.run_cli('generate', '--dialogue', str(dialog),
+                             '--out', str(self.root / 'dialogue.wav'))
+
     def test_no_overwrite_or_request(self):
         out = self.root / 'test.wav'
         out.write_bytes(b'original')

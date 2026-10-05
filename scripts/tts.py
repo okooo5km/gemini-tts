@@ -67,6 +67,29 @@ def nonempty(value, name):
     return value
 
 
+def resolve_voice(value):
+    """Map a saved nickname to its voice ID; pass other names through.
+
+    The alias table lives beside the API key, so callers that promise to stay
+    offline (--dry-run) must keep the raw name instead of reading it.
+    """
+    name = nonempty(value, 'voice')
+    if name.startswith(('voice_', 'voicekey_')):
+        return name
+    try:
+        if not config_path().exists():
+            return name
+        aliases = read_config().get('voices')
+    except (ValueError, OSError, KeyError, TypeError):
+        # A missing or unreadable alias table must not block synthesis.
+        return name
+    if isinstance(aliases, dict):
+        target = aliases.get(name)
+        if isinstance(target, str) and target.strip():
+            return target.strip()
+    return name
+
+
 CONTROL_FIELDS = {
     'emotion': '情绪', 'pace': '语速', 'accent': '口音',
     'delivery': '表达方式', 'emphasis': '重音要求',
@@ -85,6 +108,8 @@ def combined_style(args):
 
 def payload(args):
     style_default = combined_style(args)
+    offline = getattr(args, 'dry_run', False)
+    pick_voice = (lambda value: nonempty(value, 'voice')) if offline else resolve_voice
     if args.dialogue:
         dialog = json.loads(Path(args.dialogue).expanduser().read_text(encoding='utf-8-sig'))
         speakers = dialog.get('speakers', [])
@@ -94,7 +119,7 @@ def payload(args):
         normalized = []
         for speaker in speakers:
             name = nonempty(speaker.get('speaker'), 'speaker')
-            voice = nonempty(speaker.get('voice'), 'voice')
+            voice = pick_voice(speaker.get('voice'))
             if voice.startswith(('voice_', 'voicekey_')):
                 raise ValueError('Dialogue requires prebuilt voices')
             names.add(name)
@@ -118,7 +143,7 @@ def payload(args):
         text = args.text if args.text is not None else (sys.stdin.read().removeprefix('\ufeff') if args.file == '-' else Path(args.file).expanduser().read_text(encoding='utf-8-sig'))
         content = [{'type': 'text', 'text': nonempty(text, 'text'),
                     'annotations': [{'type': 'speech_metadata', 'style': style_default}]}]
-        speech = [{'voice': nonempty(args.voice, 'voice')}]
+        speech = [{'voice': pick_voice(args.voice)}]
     return {'model': MODEL, 'input': [{'type': 'user_input', 'content': content}],
             'response_format': {'type': 'audio', 'mime_type': 'audio/wav'},
             'generation_config': {'speech_config': speech}}
@@ -151,7 +176,7 @@ def main():
     source.add_argument('--text')
     source.add_argument('--file', help='UTF-8 transcript; - reads stdin')
     source.add_argument('--dialogue', help='JSON with speakers and turns')
-    generate.add_argument('--voice', default='Kore', help='Voice name, e.g. Kore or Puck; default: Kore')
+    generate.add_argument('--voice', default='Kore', help='Prebuilt voice name, existing voice_... ID or voicekey_...; default: Kore')
     generate.add_argument('--style', default='', help='Free-form acting instructions; combined with the controls below')
     for field, example in {
         'emotion': '温暖、鼓励，带一点笑意',
